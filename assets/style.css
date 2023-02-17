@@ -169,20 +169,55 @@ margin: auto;
 	box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.09);
 }
 
-input[type="submit"]{
+.unpressed {
+	font-family: 'Syne';
+	font-weight: 700;
+	color: #1D6154;
+	background-color: white;
+	margin : 2em .5em;
+	text-align: center;
+	border: .15em solid #1D6154;
+	border-radius: 60px;
+	padding: .5em 2em;
+}
+
+.unpressed:hover {
+	background-color: #adeee2;
+	cursor: pointer;
+	transition: all .3s ease-in-out;
+}
+
+.pressed {
 	font-family: 'Syne';
 	font-weight: 700;
 	color: white;
 	background-color: #1D6154;
-	margin : 2em auto ;
+	margin : 2em .5em;
+	text-align: center;
+	border-radius: 60px;
+	padding: .5em 2em;
+}
+
+input[type="submit"] {
+	font-family: 'Syne';
+	font-weight: 700;
+	color: white;
+	background-color: #1D6154;
+	margin : 2em auto;
 	width: 180px;
 	text-align: center;
-	border-radius: 60px ;
+	border-radius: 60px;
 }
 
 footer nav ul {
 	display: flex;
 	justify-content: flex-end;
-	margin: 2em
+	margin: 2em;
 }
 
+.filterList {
+	display: flex;
+	justify-content: center;
+	flex-flow: row wrap;
+	list-style-type: none;
+}
