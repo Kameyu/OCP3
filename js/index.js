@@ -27,7 +27,7 @@ function logOut() {
 function printWorks(workList, where) {
 	for (let i = 0; i < workList.length; i++) {
 		const fig = document.createElement("figure");
-		fig.dataset.id = i;
+		fig.dataset.id = workList[i].id;
 		
 		const img = document.createElement("img");
 		const cap = document.createElement("figcaption");
@@ -35,6 +35,40 @@ function printWorks(workList, where) {
 		img.src = workList[i].imageUrl;
 		cap.innerText = workList[i].title;
 		
+		/* Gestion modale */
+		if (where.className == "modal-main") {
+			// Dans la modale, le figcaption doit afficher "éditer" et non le titre
+			cap.innerText = "éditer";
+
+			const container = document.createElement("div");
+			container.className = "options";
+
+			const del = document.createElement("button");
+			const move = document.createElement("button");
+
+			const delIcon = document.createElement("i");
+			delIcon.className = "fa-solid fa-trash-can";
+			
+			const moveIcon = document.createElement("i");
+			moveIcon.className = "fa-solid fa-up-down-left-right";
+
+			del.className = "optionsButton";
+			del.id = "del";
+
+			move.className = "optionsButton";
+			move.id = "move";
+
+			del.addEventListener("click", askDeleteWork);
+
+			del.appendChild(delIcon);
+			move.appendChild(moveIcon);
+
+			container.appendChild(move);
+			container.appendChild(del);
+
+			fig.appendChild(container);
+		}
+
 		fig.appendChild(img);
 		fig.appendChild(cap);
 		where.appendChild(fig);
@@ -141,6 +175,84 @@ function hideModal(e) {
 		return;
 }
 
+function askDeleteWork(e) {
+	// On ne fait rien si le prompt est déjà ouvert
+	if (document.querySelector(".promptContainer"))
+		return;
+
+	// 			  #del	  .options	 <figure>
+	const fig = e.target.parentNode.parentNode;
+
+	const promptContainer = document.createElement("div");
+	promptContainer.className = "promptContainer";
+
+	const confirm = document.createElement("p");
+	confirm.innerHTML = "Confirmer ?";
+
+	const yes = document.createElement("button");
+	const no = document.createElement("button");
+	yes.id = "yes";
+	no.id = "no";
+	yes.innerHTML = "Oui";
+	no.innerHTML = "Non";
+
+	yes.addEventListener("click", function(e) {deleteWork(e, parseInt(fig.dataset.id))});
+	no.addEventListener("click", function(e) {
+		e.preventDefault();
+		// On rétablit le clic du bouton #del
+		e.target.addEventListener("click", askDeleteWork);
+		fig.removeChild(promptContainer);
+	});
+
+	promptContainer.appendChild(confirm);
+	promptContainer.appendChild(yes);
+	promptContainer.appendChild(no);
+
+	fig.appendChild(promptContainer);
+}
+
+async function queryDeleteWork(workId) {
+	const token = JSON.parse(localStorage.getItem("auth")).token;
+	const rsp = await fetch("http://localhost:5678/api/works/"+workId,
+	{
+		method: "DELETE",
+		headers: { "Authorization": "Bearer "+ token }
+	});
+	return rsp;
+}
+
+async function deleteWork(e, workId) {
+	if (e.target.id != "yes") {
+		return;
+	}
+
+	const response = await queryDeleteWork(workId);
+
+	// On traite la réponse de l'API
+	switch (response.status) {
+		case 200:
+		case 204:
+			// On recherche l'index du work dans la liste des works
+			for (const work of works) {
+				if (work.id == workId)
+				works.splice(works.indexOf(work), 1); // on supprime intéractivement
+			}
+			
+			// on actualise les galleries
+			const mainGallery = document.querySelector("#portfolio .gallery");
+			const modalGallery = document.querySelector(".modal-main");
+			
+			mainGallery.innerHTML = "";
+			modalGallery.innerHTML = "";
+			
+			printWorks(works, mainGallery);
+			printWorks(works, modalGallery);
+			break;
+		default:
+			return;
+	}
+}
+
 // On vérifie si l'utilisateur est connecté
 if (isLoggedIn()) {
 	// Ajout de la bannière
@@ -189,9 +301,7 @@ if (isLoggedIn()) {
 	editWorks.addEventListener("click", openModal);
 
 	// On remplit notre modale pour la première fois
-	const modalWorks = Array.from(works); // On copie les travaux "par défaut"
-	modalWorks.forEach(element => { element.title = "éditer" });
-	printWorks(modalWorks, document.querySelector(".modal-main"));
+	printWorks(works, document.querySelector(".modal-main"));
 
 	const modalWrapper = document.querySelector(".modal-wrapper");
 	const addButton = document.createElement("button");
@@ -208,9 +318,6 @@ if (isLoggedIn()) {
 
 	modalWrapper.appendChild(addButton);
 	modalWrapper.appendChild(deleteGallery);
-
-	// Ajouter icônes move/delete
-
 
 	/* TODO: Ajouter modale "ajout projet"
 		-> backup page préc. ?
