@@ -23,6 +23,24 @@ function logOut() {
 	}
 }
 
+function printError(where, msg, isError) {
+	// Si le message n'est pas affiché, on le crée
+	let errorElem;
+	if (!(errorElem = document.getElementById("info")))
+	{
+		errorElem = document.createElement("p");
+		errorElem.id = "info";
+		errorElem.className = isError ? "error" : "success";
+	}
+	errorElem.innerHTML = msg;
+	where.parentNode.insertBefore(errorElem, where);
+
+	setTimeout(function() {
+		if (errorElem)
+			where.parentNode.removeChild(errorElem);
+	}, 3000);
+}
+
 // Fonction qui affiche la liste des travaux en cours, avec ou sans filtre
 function printWorks(workList, where) {
 	for (let i = 0; i < workList.length; i++) {
@@ -36,7 +54,7 @@ function printWorks(workList, where) {
 		cap.innerText = workList[i].title;
 		
 		/* Gestion modale */
-		if (where.className == "modal-main") {
+		if (where.className == "modal-main-gallery") {
 			// Dans la modale, le figcaption doit afficher "éditer" et non le titre
 			cap.innerText = "éditer";
 
@@ -240,7 +258,7 @@ async function deleteWork(e, workId) {
 			
 			// on actualise les galleries
 			const mainGallery = document.querySelector("#portfolio .gallery");
-			const modalGallery = document.querySelector(".modal-main");
+			const modalGallery = document.querySelector(".modal-main-gallery");
 			
 			mainGallery.innerHTML = "";
 			modalGallery.innerHTML = "";
@@ -251,6 +269,126 @@ async function deleteWork(e, workId) {
 		default:
 			return;
 	}
+}
+
+function resetForm() {
+	const container = document.querySelector(".photoContainer")
+	container.childNodes.forEach(element => {
+		element.removeAttribute("style");
+		if (element.id === "previewImage")
+			container.removeChild(element);
+
+		if (element.id === "fileLabel")
+			element.innerHTML = "+ Ajouter photo";
+	});
+	document.querySelector("#title").value = "";
+	document.querySelector("#category").value = 1;
+}
+
+function openSub() {
+	document.querySelector(".modal-main").style.display = "none";
+	document.querySelector(".modal-upload").style.display = "flex";
+	document.querySelector("#backButton").style.display = "flex";
+	document.querySelector(".modal-wrapper h2").innerHTML = "Ajout photo";
+}
+
+function closeSub() {
+	document.querySelector(".modal-upload").style.display = "none";
+	document.querySelector(".modal-main").style.display = "block";
+	document.querySelector("#backButton").style.display = "none";
+	document.querySelector(".modal-wrapper h2").innerHTML = "Gallerie photo";
+
+	// Reset le formulaire quand on clique sur la flèche "retour"
+	resetForm();
+}
+
+function selectPhoto(e) {
+	e.preventDefault();
+	const file = e.target.files[0];
+	const form = document.querySelector(".modal-upload form");
+	if (!file)
+		return;
+	else if (file.type != "image/png" && file.type != "image/jpg" && file.type != "image/jpeg") {
+		printError(form, "* Votre image doit être au bon format", true);
+		return;
+	}
+
+	const container = document.querySelector(".photoContainer");
+	container.childNodes.forEach(element => {
+		element.style.display = "none";
+	});
+
+	const imagePreview = document.createElement("img");
+	imagePreview.id = "previewImage";
+	imagePreview.src = URL.createObjectURL(e.target.files[0]);
+
+	document.querySelector('#fileLabel').innerHTML = "";
+	container.appendChild(imagePreview);
+
+	document.querySelector('.modal-upload input[type="submit"]').disabled = false;
+}
+
+async function sendWork(e, file) {
+	e.preventDefault();
+	const form = document.querySelector(".modal-upload form");
+	const title = document.querySelector("#title");
+	const fd = new FormData(form);
+
+	// On check les erreurs potentielles
+	if (!file) {
+		printError(form, "* Veuillez remplir tous les champs", true);
+		return;
+	}
+	else if (file.size > 4194304 || !title.value) {
+		let msg;
+		if (file.size > 4194304)
+			msg = "* Votre fichier dépasse 4 Mo";
+		else
+			msg = "* Veuillez remplir tous les champs";
+		printError(form, msg, true);
+		return;
+	}
+
+	// Nos erreurs sont gérées, on envoie la requête
+	const token = JSON.parse(localStorage.getItem("auth")).token;
+	const query = {
+		method: "POST",
+		body: fd,
+		headers : { "Authorization": "Bearer "+ token }
+	}
+
+	const response = await fetch("http://localhost:5678/api/works", query);
+	const work = await response.json();
+	
+	switch (response.status) {
+		case 201:
+			// on ajoute le dernier travail à la liste
+			works.push(work);
+
+			// on actualise les galleries
+			const mainGallery = document.querySelector("#portfolio .gallery");
+			const modalGallery = document.querySelector(".modal-main-gallery");
+			
+			mainGallery.innerHTML = "";
+			modalGallery.innerHTML = "";
+			
+			printWorks(works, mainGallery);
+			printWorks(works, modalGallery);
+
+			printError(form, "Envoyé avec succès !", false);
+			break;
+		case 400:
+			printError(form, "Erreur dans la requête", true);
+			break;
+		case 401:
+			printError(form, "Vous n'avez pas l'autorisation", true);
+			break;
+		case 500:
+		default:
+			printError(form, "Erreur inconnue", true);
+			break;
+	}
+	setTimeout(resetForm, 3000);
 }
 
 // On vérifie si l'utilisateur est connecté
@@ -301,12 +439,14 @@ if (isLoggedIn()) {
 	editWorks.addEventListener("click", openModal);
 
 	// On remplit notre modale pour la première fois
-	printWorks(works, document.querySelector(".modal-main"));
+	printWorks(works, document.querySelector(".modal-main-gallery"));
 
 	const modalWrapper = document.querySelector(".modal-wrapper");
+	const modalMain = document.querySelector(".modal-main");
 	const addButton = document.createElement("button");
 	addButton.innerHTML = "Ajouter une photo"
 	addButton.className = "pressed";
+	addButton.id = "addButton";
 
 	const deleteGallery = document.createElement("a")
 
@@ -316,13 +456,93 @@ if (isLoggedIn()) {
 	deleteGallery.innerHTML = "Supprimer la gallerie";
 	deleteGallery.href = "#";
 
-	modalWrapper.appendChild(addButton);
-	modalWrapper.appendChild(deleteGallery);
+	modalMain.appendChild(addButton);
+	modalMain.appendChild(deleteGallery);
 
-	/* TODO: Ajouter modale "ajout projet"
-		-> backup page préc. ?
-		b = Object.assign({}, a)
-	*/
+	//On ajoute la div "ajout projet"
+	const modalUpload = document.querySelector(".modal-upload");
 
-	// TODO: supprimer projet
+	const backButton = document.createElement("button");
+	backButton.id = "backButton";
+	const backIcon = document.createElement("i");
+	backIcon.className = "fa-solid fa-arrow-left";
+	backButton.appendChild(backIcon);
+	modalWrapper.prepend(backButton);
+
+	const photoContainer = document.createElement("div");
+	photoContainer.className = "photoContainer";
+
+	const imageLogo = document.createElement("i");
+	imageLogo.className = "fa-regular fa-image";
+	
+	const fileLabel = document.createElement("label");
+	fileLabel.setAttribute("for", "image");
+	fileLabel.id = "fileLabel";
+	fileLabel.innerHTML = "+ Ajouter photo";
+	const fileInput = document.createElement("input");
+	fileInput.type = "file";
+	fileInput.id = "image";
+	fileInput.name = "image";
+	fileInput.accept = "image/png, image/jpeg";
+	fileInput.required = true;
+
+	const fileInputDesc = document.createElement("p");
+	fileInputDesc.innerHTML = "jpg, png, 4 Mo max";
+
+	photoContainer.appendChild(imageLogo);
+	photoContainer.appendChild(fileLabel);
+	photoContainer.appendChild(fileInput);
+	photoContainer.appendChild(fileInputDesc);
+
+	const formUpload = document.createElement("form");
+	
+	formUpload.appendChild(photoContainer);
+
+	const formTitleLabel = document.createElement("label");
+	formTitleLabel.setAttribute("for", "title");
+	formTitleLabel.innerHTML = "Titre";
+	const formTitle = document.createElement("input");
+	formTitle.name = "title";
+	formTitle.type = "text";
+	formTitle.id = "title";
+	formTitle.required = true;
+	formUpload.appendChild(formTitleLabel);
+	formUpload.appendChild(formTitle);
+
+	const formCategoryLabel = document.createElement("label");
+	formCategoryLabel.setAttribute("for", "category");
+	formCategoryLabel.innerHTML = "Catégorie";
+	const formCategory = document.createElement("select");
+	formCategory.name = "category";
+	formCategory.id = "category";
+	formCategory.required = true;
+
+	for (let category of cats) {
+		const opt = document.createElement("option");
+		opt.value = category.id;
+		opt.innerHTML = category.name;
+		formCategory.appendChild(opt);
+	}
+
+	formUpload.appendChild(formCategoryLabel);
+	formUpload.appendChild(formCategory);
+	modalUpload.appendChild(formUpload);
+
+	// On rajoute le bouton d'envoi
+	const sendWorkButton = document.createElement("input");
+	sendWorkButton.type = "submit";
+	sendWorkButton.value = "Valider";
+	sendWorkButton.disabled = true;
+
+	modalUpload.appendChild(sendWorkButton);
+
+	// backbutton display true
+	addButton.addEventListener("click", openSub);
+	backButton.addEventListener("click", closeSub);
+
+	fileInput.addEventListener("change", selectPhoto);
+
+	sendWorkButton.addEventListener("click", function(e) {
+		sendWork(e, fileInput.files[0]);
+	});
 }
